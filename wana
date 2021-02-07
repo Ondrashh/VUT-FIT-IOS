@@ -1,0 +1,307 @@
+#!/bin/sh
+
+#1.Projekt IOS
+#1.BIT 2018/19
+#Vypracoval: Ondrej Pavlacky
+#xpavla15@vutbr.cz
+#Primarne testovano na Ubuntu
+
+##############BRIEF################
+#Skript nacita vsechna data ze soboru do 'vstupni_data', vsechny prikazy a filty posilaji 
+#prislusne upravena data z prikazy/filtru zpet do 'vstupni_data'.
+#Vsechny prikazy jsou provadeny nasledne po vyhodnoceni kontorle jejich duplicitniho vyskytu
+###################################
+
+
+#Vsechny tyto kontrolni promenne zde jsou pouzity jako kontrola opakovani se urcitych prikazu 
+#-> pri prvotnim pouziti se nastavi hodnota na 1 a pri duplicitnim pouziti prikazu/filtru se program ukonci s chybovou hlaskou
+#Nektere promenne jsou pripraveny na nahravani dat z vstupnich souboru
+
+POSIXLY_CORRECT=yes	
+
+kontrolni_prom=0	
+kontrol_prom_listip=0 
+kontrol_prom_listhosts=0
+kontrol_prom_listuri=0
+kontrol_prom_histip=0
+kontrol_prom_histload=0
+kontrol_prom_a=0
+kontrol_prom_b=0
+kontrol_prom_ip=0
+kontrol_prom_uri=0
+cas_ze_vstupu_a=0
+cas_ze_vstupu_b=0
+
+while test $# -gt 0; do #cyklus na pruchod vsech argumentu a postupne prirazeni jejich vyznamu
+	case "$1" in
+
+		#Kontrola pripadu prikazu/filtru
+
+		list-ip) 
+
+			if test $kontrol_prom_listip -ge 1; 	#test kontroluje jestli stejny prikaz se opakuje
+				then  echo "ERROR-Prikaz listip byl zadan vicekrat"
+					  exit 1 					#Ukonceni skriptu
+			fi
+			kontrol_prom_listip=1 		#Nastaveni kontrolni promenne na 1, aby bylo poznat, ze uz to jednou projelo
+			shift ;;	#Posunuti argumentu na dalsi
+						#Stejny  postup vyuzit i u ostatnich prikazu -> komentar u dalsich neni nutny
+		list-hosts) 
+			
+			if test $kontrol_prom_listhosts -ge 1; 
+				then echo "ERROR-Prikaz listhosts byl zadan vicekrat"
+					 exit 1 
+			fi
+			kontrol_prom_listhosts=1  
+			shift ;;
+
+		list-uri)
+	
+			if test $kontrol_prom_listuri -ge 2; 
+				then echo "ERROR-Prikaz listuri byl zadan vicekrat" 
+					 exit 1 
+			fi
+			kontrol_prom_listuri=1
+			shift ;;
+
+		hist-ip)
+	
+			if test $kontrol_prom_histip -ge 1; 
+				then echo "ERROR-Prikaz histip byl zadan vicekrat"
+				     exit 1 
+			fi
+			kontrol_prom_histip=1 
+			shift ;;
+		
+		hist-load)
+		
+			if test $kontrol_prom_histload -ge 1; 
+				then echo "ERROR-Prikaz histload byl zadan vicekrat"
+				     exit 1 
+			fi
+			kontrol_prom_histload=1 
+			shift ;;
+
+		#Kontrola pripadu filtru
+
+		-a)
+			if test $kontrol_prom_a -ge 1; 
+				then echo "ERROR-Filtr -a byl zadan vicekrat"
+				     exit 1 
+			fi
+			kontrol_prom_a=1 
+			shift 
+			cas_ze_vstupu_a="$1" #Nahraji si datum do dalsi promenne (to stejne plati pro vsechny dalsi, se nahravaji jine parametry)
+			shift ;;
+
+		-b)
+			if test $kontrol_prom_b -ge 1; 
+				then echo "ERROR-Filtr -b byl zadan vicekrat"
+				     exit 1 
+			fi
+			kontrol_prom_b=1 
+			shift 
+			cas_ze_vstupu_b="$1"
+			shift ;;
+
+		-ip)
+			if test $kontrol_prom_ip -ge 1; 
+				then echo "ERROR-Filtr -ip byl zadan vicekrat"
+				     exit 1 
+			fi
+			kontrol_prom_ip=1 
+			shift 
+			ip_argv_filtr="$1"
+			shift ;;
+
+		-uri)
+			if test $kontrol_prom_uri -ge 1; 
+				then echo "ERROR-Filtr -uri byl zadan vicekrat"
+				     exit 1 
+			fi
+			kontrol_prom_uri=1     
+			shift 
+			URI="$1"
+			shift ;;
+
+		*.gz) 
+			if test -r "$1";
+				then kontrolni_prom=1		#Rozbaleni souboru a jeho prirarezni do 'vstupni_soubory'
+					if test -z "$vstupni_soubory";
+						then vstupni_soubory="`gunzip -c $1`" 		 #Pocatecni promenna je prazda proto ji nechci odradkovat
+					else 
+						vstupni_soubory="$vstupni_soubory
+`gunzip -c $1`"
+		    		fi	
+		    else 
+		    	echo "ERROR- soubor "$1" se nepodarilo otevrit!"
+		    	exit 1 
+		    fi
+		    shift ;;
+		    
+		*)
+		   if test -r $1; 
+				then kontrolni_prom=1		#Nahrani souboru do 'vstupni_soubory'
+					if test -z "$vstupni_soubory"; 		 #Pocatecni promenna je prazda proto ji nechci odradkovat
+						then  vstupni_soubory="`cat $1`"
+					else
+					 	vstupni_soubory="$vstupni_soubory
+`cat $1`"	#Umele udelani mezery aby od sebe oddelil jednotlive soubory 
+					fi	
+	
+				else 
+				echo "ERROR- V argumentu je neznamy prikaz/soubor "$1"! "  #Pokud nenni rozeznan zadny znamy prikaz/filtr
+				exit 1 
+		   fi
+		   shift ;;
+		   
+esac
+done
+
+#Pokud neni zadan vstupni soubor, funkce pro nacitani za vstupu a ukonceni ctrl+d
+if test $kontrolni_prom -eq 0;	
+	then vstupni_soubory=$(cat)
+fi
+
+#Kontrola poctu prikazu - je povoleno pouzivat pouze jeden prikaz
+kontrola=$(expr  "$kontrol_prom_listip" + "$kontrol_prom_listhosts" + "$kontrol_prom_listuri" + "$kontrol_prom_histip" + "$kontrol_prom_histload")
+if test $kontrola -gt 1; then		#Pokud je soucet vsech prikazu vetsi jak jedna tak jsem zjistil
+	echo "ERROR- Vicero prikazu!"	#ze se nekdo pokusil predat vicero prikazu
+	exit 1 
+fi
+
+#Provedeni filtru
+
+#a-datetime	- Vytrhnuti, nasledne orezani + prevod na sekundy pro porovnani - AFTER
+if test $kontrol_prom_a -ge 1;	#Kontrola jestli je byla tato funkce zavolana
+        then cas_ze_vstupu_prepocteny=`date -d "$cas_ze_vstupu_a" +"%s"`    #Prevod data ze vstupu
+    		 vysledek=$(printf  "%s" "$vstupni_soubory" | while read -r radek ; do 		#Vysledek pouzivam pro uschovani hodnoty po ukonceni cyklu, jinak se k ni nedostanu
+			 odklad_data_date="`printf  "%s"    "$radek" | awk '{print $4}'`"	       	#Vyriznuti pouze jednoho sloupce
+			 odklad_data_date="`printf  "%s"  "$odklad_data_date" | sed  's/^.//'`"	    #Oriznuti ho o prvni znak [ ktery tam zustal
+	    	 odklad_data_date="`printf  "%s"  "$odklad_data_date" | sed  's/\//-/g'`"	#Nahrazeni / za - (kvuli formatu pro date)
+		     odklad_data_date="`printf  "%s"  "$odklad_data_date" | sed  's/:/ /'`"		#Nahrazeni prvni dvojtecky za mezeru (kvuli formatu date)
+			 prepocet=`date -d "$odklad_data_date" +"%s"`								#Prepocet = prepocet data kazdeho radku
+
+		if test $prepocet -gt $cas_ze_vstupu_prepocteny; 	#Podminka pro vyhodnocovani jestli je datum vetsi nez "after" od zadaneho data					
+		   then printf "%s\n" "$radek"	#Do promenne vysledek si nactu celou hodnotu aktualiho radku
+		fi	  
+		
+		done)
+		
+		vstupni_soubory="$vysledek" #Nahravam do 'vstupni_hodnoty' zbytek po kontrole data
+fi
+
+#b-datetime - Vytrhnuti, nasledne orezani + prevod na sekundy - BEFORE
+if test $kontrol_prom_b -ge 1;	#Kontrola jestli je byla tato funkce zavolana
+        then cas_ze_vstupu_prepocteny=`date -d "$cas_ze_vstupu_b" +"%s"`    #Prevod data ze vstupu
+    		vysledek=$(printf "%s" "$vstupni_soubory" | while read -r radek ; do 		#Vysledek pouzivam pro uschovani hodnoty po ukonceni cyklu, jinak se k ni nedostanu
+			odklad_data_date="`printf  "%s"    "$radek" | awk '{print $4}'`"			#Vyriznuti pouze jednoho sloupce
+			odklad_data_date="`printf  "%s"   "$odklad_data_date" | sed  's/^.//'`"		#Oriznuti ho o prvni znak [ ktery tam zustal
+	    	odklad_data_date="`printf  "%s"  "$odklad_data_date"  | sed  's/\//-/g'`"	#Nahrazeni / za - (kvuli formatu pro date)
+		    odklad_data_date="`printf  "%s"  "$odklad_data_date"  | sed  's/:/ /'`"		#Nahrazeni prvni dvojtecky za mezeru (kvuli formatu date)
+			prepocet=`date -d "$odklad_data_date" +"%s"`								#Prepocet = prepocet data kazdeho radku
+
+		if test $prepocet -lt $cas_ze_vstupu_prepocteny; #Podminka pro vyhodnocovani jestli je datum mensi nez "before" od zadaneho data
+		   then printf  "%s\n" "$radek" #Do promenne vysledek si nactu celou hodnotu aktualniho radku
+		fi	  
+		
+		done)
+		
+		vstupni_soubory="$vysledek"	#Nahravam do 'vstupni_hodnoty' zbytek po kontrole data
+fi
+
+#ip-filtr - funkce funguje na principu filtrovani ip adres pomoci funkce grep podle kontroly shody ip_argv_filtr
+if test $kontrol_prom_ip -ge 1;		#Kontrola jestli je byla tato funkce zavolana
+	then vstupni_soubory="`echo "$vstupni_soubory" | grep "$ip_argv_filtr"`"	#Vytrhne radky se stejnymi hodnotami ip adrasy	
+fi
+
+#uri-filter
+if test $kontrol_prom_uri -ge 1;	#Kontrola jestli je byla tato funkce zavolana
+	then vstupni_soubory="`echo "$vstupni_soubory" | grep "$URI"`"	#Vytrhne radky se stejnym hledanym vyrazem	
+fi
+
+#Provedeni prikazu
+
+#listip-prikaz - Vypise vsechny ip adresy v danem dokumentu (bez duplicit)
+if test $kontrol_prom_listip -ge 1;	#Kontrola jestli je byla tato funkce zavolana
+	then vstupni_soubory="`echo  "$vstupni_soubory" | awk '{print $1}'`"	#Vytrhne pouze prvni sloupec
+		 vstupni_soubory="`echo  "$vstupni_soubory" | sort -u`"				#Vytrideni duplikovanych hodnot
+fi 
+
+#listhosts-prikaz - Vypise vsechny domeny pripadne nenalezene ip adresy
+if test $kontrol_prom_listhosts -ge 1;	#Kontrola jestli je byla tato funkce zavolana
+	then vstupni_soubory="`echo "$vstupni_soubory" | awk '{print $1}'`"	#Vytrhne pouze prvni sloupec
+		for radek in $vstupni_soubory; do			
+			host "$radek" > /dev/null	#Zkouska jestli je host schopen najit ip adresu
+			if test $? -eq 0; then 		#Pokud domenu naslo, vypise ji
+				host="$host`host "$radek" | awk '{printf $NF}'`""\n"
+
+			else 
+				host=$host$radek"\n"	#Pokud ji nanaslo, vraci ip adresu
+			fi
+	    done
+	    	vstupni_soubory="$host"		#Nacteni dat do 'vstupni_soubory'
+	    	vstupni_soubory="`echo  "$vstupni_soubory" | sort -u`"	#Vytrideni duplicitnich adres
+	    	vstupni_soubory="`echo  "$vstupni_soubory" | sed 1d	`" 	#Potize s prvnim prazdnym radkem, vypisoval se bez dat, ale prazdny nebyl
+fi 																			#proto jsem pristoupil s metodou odstraneni prvniho radku
+
+#listuri-prikaz - Vypisuje seznam uri adres (bez duplicit)
+if test $kontrol_prom_listuri -ge 1;	#Kontrola jestli je byla tato funkce zavolana
+	then vstupni_soubory="`echo  "$vstupni_soubory" | awk '{print $7}'`"					#Oddeli sloupec prislusici uri adresam
+		 vstupni_soubory="`echo  "$vstupni_soubory" | sed 's/\(\/[^ ]*|[^\/]*\).*/\1/'`"    #Snaha o co nejvetsi osetreni
+		 vstupni_soubory="`echo  "$vstupni_soubory" | sed '/^\//!d'`"						#Odstrani vse, co nezacina /	
+		 vstupni_soubory="`echo  "$vstupni_soubory" | sort -u`"								#Vytrideni duplicitnich adres
+fi
+
+#histogram-ip
+if test $kontrol_prom_histip -ge 1;	#Kontrola jestli je byla tato funkce zavolana
+	then vstupni_soubory="`printf "%s" "$vstupni_soubory" | awk '{print $1}'`"	#Oddeli prvni sloupec
+		 vstupni_soubory="`printf "%s"  "$vstupni_soubory" | sort  `"				#Serazeni dat	
+		 vstupni_soubory="`printf "%s"  "$vstupni_soubory" | uniq -c `"			#Vytridi duplicity
+		 vstupni_soubory="`printf "%s"  "$vstupni_soubory" | sort -nr `"		#Chci histogram otocit - nastaval problem pri pouziti pouze sort -r
+		 vstupni_soubory="`printf "%s"  "$vstupni_soubory" | awk '{print $2 " " $1}'`" #Hodnoty mi vypadnou obracene a proto je chci prohodit
+		 #Vypis histogramu pomoci  funkce awk
+		 printf "%s" "$vstupni_soubory" | awk '{tmp=sprintf("%-*s", $2, ""); gsub(" ", "#", tmp); printf("%-10s (%d): %s\n", $1,$2, tmp)}'
+		 exit 0 	#ukonceni skriptu - uspesne
+fi 
+
+#histogram-load
+if test $kontrol_prom_histload -ge 1;
+	then	 odklad_data_date="`printf  "%s"   "$vstupni_soubory" | awk '{print $4}'`"    	#Vyriznuti pouze ctvrteho sloupce
+			 odklad_data_date="`printf  "%s"  "$odklad_data_date" | sed  's/^.//'`"	    	#Oriznuti ho o prvni znak [ ktery tam zustal
+	    	 odklad_data_date="`printf  "%s"  "$odklad_data_date" | sed  's/\//-/g'`"		#Nahrazeni / za - (kvuli formatu pro date)
+		     odklad_data_date="`printf  "%s"  "$odklad_data_date" | sed  's/:/q/' `"
+		     odklad_data_date="`printf  "%s"  "$odklad_data_date" | awk -F ":" '{print $1":00"}'`"		#Nahrazeni prvni dvojtecky za mezeru (kvuli formatu date)
+			 odklad_data_date="`printf  "%s"  "$odklad_data_date" | sort  `"			#Serazeni dat	
+		 	 odklad_data_date="`printf  "%s"  "$odklad_data_date" | uniq -c `"			#Vytridi duplicity
+			 odklad_data_date="`printf  "%s"  "$odklad_data_date" | sed  's/q/ /' `"	#Nahradim q za mezeru
+			 odklad_data_date="`printf  "%s"  "$odklad_data_date" | sed  's/-/ /' `"	#Nahradim pomlcku za mezeru
+			 odklad_data_date="`printf  "%s"  "$odklad_data_date" | sed  's/-/ /' `"	#Znovu
+			 odklad_data_date="`printf  "%s"  "$odklad_data_date" | awk '{print $1 " " $4 " " $3 " " $2 " " $5}'`"  #Prehodim poradi dnu a roku
+			 odklad_data_date="`printf  "%s"  "$odklad_data_date" | sed '{s/Jan/01/}'`"	#<--
+			 odklad_data_date="`printf  "%s"  "$odklad_data_date" | sed '{s/Feb/02/}'`"	#<--
+			 odklad_data_date="`printf  "%s"  "$odklad_data_date" | sed '{s/Mar/03/}'`"	#<--
+			 odklad_data_date="`printf  "%s"  "$odklad_data_date" | sed '{s/Apr/04/}'`" #<--
+			 odklad_data_date="`printf  "%s"  "$odklad_data_date" | sed '{s/May/05/}'`"	#<--
+			 odklad_data_date="`printf  "%s"  "$odklad_data_date" | sed '{s/Jun/06/}'`"	#<--------pro vsechny mesice plati zmena formatu
+			 odklad_data_date="`printf  "%s"  "$odklad_data_date" | sed '{s/Jul/07/}'`"	#<--
+			 odklad_data_date="`printf  "%s"  "$odklad_data_date" | sed '{s/Aug/08/}'`"	#<--
+			 odklad_data_date="`printf  "%s"  "$odklad_data_date" | sed '{s/Sep/09/}'`"	#<--
+			 odklad_data_date="`printf  "%s"  "$odklad_data_date" | sed '{s/Oct/10/}'`"	#<--
+			 odklad_data_date="`printf  "%s"  "$odklad_data_date" | sed '{s/Nov/11/}'`"	#<--
+			 odklad_data_date="`printf  "%s"  "$odklad_data_date" | sed '{s/Dec/12/}'`"	#<--
+			 odklad_data_date="`printf  "%s"  "$odklad_data_date" | sed  's/ /q/' `"	#Za q dosadim mezeru
+			 odklad_data_date="`printf  "%s"  "$odklad_data_date" | sed  's/ /-/' `"	#Za mezeru dosadim pomlcku
+			 odklad_data_date="`printf  "%s"  "$odklad_data_date" | sed  's/ /-/' `"	#Znovu
+			 odklad_data_date="`printf  "%s"  "$odklad_data_date" | sed  's/q/ /' `"	#Za q dosadim mezeru
+		
+			 odklad_data_date="`printf  "%s"  "$odklad_data_date" | awk '{print $2 " " $3 " " $1}'`" #Hodnoty mi vypadnou obracene a proto je chci prohodit
+
+
+		 #Vypis histogramu pomoci awk
+		 echo "$odklad_data_date" | awk '{tmp=sprintf("%-*s", $3, ""); gsub(" ", "#", tmp); printf("%-10s %s (%d): %s\n", $1,$2,$3, tmp)}'		
+		 exit 0
+fi
+
+printf "%s\n" "$vstupni_soubory"	#Tady na konci vypisuji finalni vezmi 'vstupni_soubory' upravene podle ruznych prikazu a  filtru
+exit 0	#Uspesne ukonceni skriptu (nevim jestli je nutne)
